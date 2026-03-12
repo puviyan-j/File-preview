@@ -1,0 +1,417 @@
+/* ─── SheetViewer.css ─────────────────────────────────────── */
+
+/* Import modern font */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+/* ─── Root Container ───────────────────────────────────────── */
+.sv-root {
+  --sv-bg: #ffffff;
+  --sv-surface: #f8f9fa;
+  --sv-border: #e2e5e9;
+  --sv-text: #202124;
+  --sv-text-secondary: #5f6368;
+  --sv-primary: #1a73e8;
+  --sv-primary-light: rgba(26, 115, 232, 0.12);
+  --sv-header-bg: #f1f3f4;
+  --sv-tab-active: #ffffff;
+  --sv-tab-hover: #e8eaed;
+  --sv-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  --sv-shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.12);
+  --sv-radius: 8px;
+  --sv-header-height: 26px;
+  --sv-row-header-width: 50px;
+  --sv-tab-height: 36px;
+  --sv-toolbar-height: 44px;
+
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100vh;
+  background: var(--sv-bg);
+  color: var(--sv-text);
+  overflow: hidden;
+  position: relative;
+}
+
+/* ─── Top Toolbar ──────────────────────────────────────────── */
+.sv-toolbar {
+  display: flex;
+  align-items: center;
+  height: var(--sv-toolbar-height);
+  padding: 0 16px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  flex-shrink: 0;
+  gap: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  z-index: 10;
+}
+
+.sv-toolbar-title {
+  font-weight: 600;
+  font-size: 14px;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 300px;
+}
+
+.sv-toolbar-info {
+  font-size: 12px;
+  opacity: 0.85;
+  display: flex;
+  gap: 16px;
+  margin-left: auto;
+}
+
+.sv-toolbar-info span {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* ─── Drop Zone ────────────────────────────────────────────── */
+.sv-dropzone {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+  background: linear-gradient(180deg, #f8f9ff 0%, #f0f2ff 100%);
+  border: 2px dashed var(--sv-border);
+  border-radius: 16px;
+  margin: 24px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.sv-dropzone:hover,
+.sv-dropzone.sv-dragover {
+  border-color: var(--sv-primary);
+  background: linear-gradient(180deg, #e8f0fe 0%, #d2e3fc 100%);
+  transform: scale(1.005);
+  box-shadow: var(--sv-shadow-lg);
+}
+
+.sv-dropzone-icon {
+  width: 80px;
+  height: 80px;
+  border-radius: 20px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 8px 32px rgba(102, 126, 234, 0.35);
+}
+
+.sv-dropzone-icon svg {
+  width: 40px;
+  height: 40px;
+  fill: white;
+}
+
+.sv-dropzone-text {
+  text-align: center;
+}
+
+.sv-dropzone-text h3 {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--sv-text);
+  margin: 0 0 8px;
+}
+
+.sv-dropzone-text p {
+  font-size: 13px;
+  color: var(--sv-text-secondary);
+  margin: 0;
+}
+
+.sv-dropzone-formats {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.sv-dropzone-formats span {
+  padding: 4px 10px;
+  border-radius: 12px;
+  background: rgba(102, 126, 234, 0.1);
+  color: #667eea;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+}
+
+/* ─── Progress Bar ─────────────────────────────────────────── */
+.sv-progress-bar {
+  height: 3px;
+  background: var(--sv-surface);
+  flex-shrink: 0;
+  position: relative;
+  overflow: hidden;
+}
+
+.sv-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #667eea, #764ba2);
+  border-radius: 0 2px 2px 0;
+  transition: width 0.15s ease-out;
+  position: relative;
+}
+
+.sv-progress-fill::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  top: 0;
+  height: 100%;
+  width: 40px;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.4));
+  animation: sv-shimmer 1.2s ease-in-out infinite;
+}
+
+@keyframes sv-shimmer {
+  0% { opacity: 0; }
+  50% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+/* ─── Grid Container ──────────────────────────────────────── */
+.sv-grid-area {
+  flex: 1;
+  display: grid;
+  grid-template-columns: var(--sv-row-header-width) 1fr;
+  grid-template-rows: var(--sv-header-height) 1fr;
+  overflow: hidden;
+  position: relative;
+}
+
+.sv-corner {
+  background: var(--sv-header-bg);
+  border-right: 1px solid var(--sv-border);
+  border-bottom: 1px solid var(--sv-border);
+  z-index: 3;
+}
+
+.sv-col-headers {
+  position: relative;
+  overflow: hidden;
+  z-index: 2;
+}
+
+.sv-col-headers canvas {
+  display: block;
+}
+
+.sv-row-headers {
+  position: relative;
+  overflow: hidden;
+  z-index: 2;
+}
+
+.sv-row-headers canvas {
+  display: block;
+}
+
+.sv-grid-viewport {
+  position: relative;
+  overflow: hidden;
+  cursor: default;
+}
+
+.sv-grid-canvas {
+  display: block;
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+/* ─── Scrollbars ──────────────────────────────────────────── */
+.sv-scrollbar-v {
+  position: absolute;
+  right: 0;
+  top: var(--sv-header-height);
+  bottom: var(--sv-tab-height);
+  width: 12px;
+  z-index: 5;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.sv-grid-area:hover .sv-scrollbar-v,
+.sv-scrollbar-v.sv-scrollbar-active {
+  opacity: 1;
+}
+
+.sv-scrollbar-v-thumb {
+  position: absolute;
+  right: 2px;
+  width: 8px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.2);
+  transition: background 0.15s;
+  cursor: pointer;
+  min-height: 30px;
+}
+
+.sv-scrollbar-v-thumb:hover,
+.sv-scrollbar-v-thumb.sv-active {
+  background: rgba(0, 0, 0, 0.4);
+}
+
+.sv-scrollbar-h {
+  position: absolute;
+  bottom: var(--sv-tab-height);
+  left: var(--sv-row-header-width);
+  right: 12px;
+  height: 12px;
+  z-index: 5;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.sv-grid-area:hover .sv-scrollbar-h,
+.sv-scrollbar-h.sv-scrollbar-active {
+  opacity: 1;
+}
+
+.sv-scrollbar-h-thumb {
+  position: absolute;
+  bottom: 2px;
+  height: 8px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.2);
+  transition: background 0.15s;
+  cursor: pointer;
+  min-width: 30px;
+}
+
+.sv-scrollbar-h-thumb:hover,
+.sv-scrollbar-h-thumb.sv-active {
+  background: rgba(0, 0, 0, 0.4);
+}
+
+/* ─── Sheet Tabs ──────────────────────────────────────────── */
+.sv-tabs {
+  display: flex;
+  align-items: stretch;
+  height: var(--sv-tab-height);
+  background: var(--sv-surface);
+  border-top: 1px solid var(--sv-border);
+  overflow-x: auto;
+  overflow-y: hidden;
+  flex-shrink: 0;
+  padding: 0 4px;
+  gap: 1px;
+}
+
+.sv-tabs::-webkit-scrollbar {
+  height: 3px;
+}
+
+.sv-tabs::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.15);
+  border-radius: 2px;
+}
+
+.sv-tab {
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--sv-text-secondary);
+  cursor: pointer;
+  white-space: nowrap;
+  border-bottom: 2px solid transparent;
+  transition: all 0.15s ease;
+  user-select: none;
+  border-radius: 4px 4px 0 0;
+}
+
+.sv-tab:hover {
+  background: var(--sv-tab-hover);
+  color: var(--sv-text);
+}
+
+.sv-tab.sv-tab-active {
+  background: var(--sv-tab-active);
+  color: var(--sv-primary);
+  border-bottom-color: var(--sv-primary);
+  font-weight: 600;
+}
+
+/* ─── Status Bar ──────────────────────────────────────────── */
+.sv-status {
+  display: flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 12px;
+  background: var(--sv-surface);
+  border-top: 1px solid var(--sv-border);
+  font-size: 11px;
+  color: var(--sv-text-secondary);
+  flex-shrink: 0;
+  gap: 16px;
+}
+
+.sv-status-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* ─── Overlay Layer ───────────────────────────────────────── */
+.sv-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.sv-overlay-image {
+  position: absolute;
+  pointer-events: auto;
+  object-fit: contain;
+}
+
+/* ─── Loading State ───────────────────────────────────────── */
+.sv-loading-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.85);
+  z-index: 20;
+  backdrop-filter: blur(4px);
+}
+
+.sv-spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid rgba(102, 126, 234, 0.2);
+  border-top-color: #667eea;
+  border-radius: 50%;
+  animation: sv-spin 0.8s linear infinite;
+}
+
+@keyframes sv-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ─── No data placeholder ─────────────────────────────────── */
+.sv-empty {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--sv-text-secondary);
+  font-size: 14px;
+}
