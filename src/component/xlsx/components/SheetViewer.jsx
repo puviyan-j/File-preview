@@ -25,6 +25,7 @@ export default function SheetViewer() {
   const [dragOver, setDragOver] = useState(false);
   const [scrollPos, setScrollPos] = useState({ top: 0, left: 0 });
   const [lastUpdate, setLastUpdate] = useState(0);
+  const [zoom, setZoom] = useState(1.0);
 
   const workbookRef = useRef(null);
   const workerRef = useRef(null);
@@ -329,6 +330,13 @@ export default function SheetViewer() {
             </>
           )}
           {parsing && <span>⏳ Parsing...</span>}
+          
+          <div className="sv-zoom-controls">
+            <button onClick={() => setZoom(z => Math.max(0.25, z - 0.25))} title="Zoom Out">−</button>
+            <span style={{ width: '40px', textAlign: 'center' }}>{Math.round(zoom * 100)}%</span>
+            <button onClick={() => setZoom(z => Math.min(3.0, z + 0.25))} title="Zoom In">+</button>
+          </div>
+
           <span
             style={{ cursor: 'pointer', opacity: 0.85 }}
             onClick={() => {
@@ -360,6 +368,7 @@ export default function SheetViewer() {
       <CanvasGrid
         sheet={activeSheet}
         workbook={workbook}
+        zoom={zoom}
         onScrollChange={(top, left) => setScrollPos({ top, left })}
       />
 

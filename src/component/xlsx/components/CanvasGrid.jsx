@@ -11,7 +11,7 @@ const COL_HEADER_HEIGHT = 26;
  * CanvasGrid — High-performance canvas-based spreadsheet grid.
  * Handles scroll, virtualization, tile caching, and rendering.
  */
-export default function CanvasGrid({ sheet, workbook, onScrollChange }) {
+export default function CanvasGrid({ sheet, workbook, zoom = 1, onScrollChange }) {
   const containerRef = useRef(null);
   const mainCanvasRef = useRef(null);
   const rowHeaderCanvasRef = useRef(null);
@@ -97,7 +97,7 @@ export default function CanvasGrid({ sheet, workbook, onScrollChange }) {
     return () => observer.disconnect();
   }, []);
 
-  // When sheet changes, invalidate and re-render
+  // When sheet changes or zoom changes, invalidate and re-render
   useEffect(() => {
     if (!sheet) return;
     tileManagerRef.current?.invalidateAll();
@@ -108,7 +108,7 @@ export default function CanvasGrid({ sheet, workbook, onScrollChange }) {
       rafRef.current = null;
     }
     scheduleRender();
-  }, [sheet, sheet?.rowCount, sheet?.colCount]);
+  }, [sheet, sheet?.rowCount, sheet?.colCount, zoom]);
 
   // React to progressive rendering updates
   useEffect(() => {
@@ -127,7 +127,7 @@ export default function CanvasGrid({ sheet, workbook, onScrollChange }) {
     if (!s || !scrollEngineRef.current) return;
     const { width, height } = getContentSize(s);
     const vp = sizeRef.current;
-    scrollEngineRef.current.setContentSize(width, height, vp.width, vp.height);
+    scrollEngineRef.current.setContentSize(width * zoom, height * zoom, vp.width, vp.height);
   }
 
   function resizeCanvases(w, h) {
@@ -352,12 +352,12 @@ export default function CanvasGrid({ sheet, workbook, onScrollChange }) {
     const { top: scrollTop, left: scrollLeft } = scrollRef.current;
     const dpr = window.devicePixelRatio || 1;
 
-    // Compute visible range
+    // Compute visible range internally converting pixel offsets back to native coords
     const range = getVisibleRange({
-      scrollTop,
-      scrollLeft,
-      viewportWidth: width,
-      viewportHeight: height,
+      scrollTop: scrollTop / zoom,
+      scrollLeft: scrollLeft / zoom,
+      viewportWidth: width / zoom,
+      viewportHeight: height / zoom,
       sheet: currentSheet,
       overscan: 3,
     });
@@ -370,13 +370,14 @@ export default function CanvasGrid({ sheet, workbook, onScrollChange }) {
         endRow: range.endRow,
         startCol: range.startCol,
         endCol: range.endCol,
-        offsetX: scrollLeft,
-        offsetY: scrollTop,
+        offsetX: scrollLeft / zoom,
+        offsetY: scrollTop / zoom,
         sheet: currentSheet,
         workbook: currentWorkbook,
         width,
         height,
         dpr,
+        zoom,
       });
     }
 
@@ -386,11 +387,12 @@ export default function CanvasGrid({ sheet, workbook, onScrollChange }) {
       renderRowHeaders(rowCtx, {
         startRow: range.startRow,
         endRow: range.endRow,
-        offsetY: scrollTop,
+        offsetY: scrollTop / zoom,
         width: ROW_HEADER_WIDTH,
         height,
         sheet: currentSheet,
         dpr,
+        zoom,
       });
     }
 
@@ -400,11 +402,12 @@ export default function CanvasGrid({ sheet, workbook, onScrollChange }) {
       renderColHeaders(colCtx, {
         startCol: range.startCol,
         endCol: range.endCol,
-        offsetX: scrollLeft,
+        offsetX: scrollLeft / zoom,
         width,
         height: COL_HEADER_HEIGHT,
         sheet: currentSheet,
         dpr,
+        zoom,
       });
     }
 
@@ -417,22 +420,25 @@ export default function CanvasGrid({ sheet, workbook, onScrollChange }) {
     const { width, height } = sizeRef.current;
     const contentSize = getContentSize(currentSheet);
 
-    if (contentSize.height === 0 || contentSize.width === 0) return;
+    const zoomedContentHeight = contentSize.height * zoom;
+    const zoomedContentWidth = contentSize.width * zoom;
 
-    const vRatio = height / contentSize.height;
-    const hRatio = width / contentSize.width;
+    if (zoomedContentHeight === 0 || zoomedContentWidth === 0) return;
+
+    const vRatio = height / zoomedContentHeight;
+    const hRatio = width / zoomedContentWidth;
 
     const showV = vRatio < 1;
     const showH = hRatio < 1;
 
     const vThumbHeight = Math.max(30, height * vRatio);
-    const vThumbTop = contentSize.height > 0
-      ? (scrollTop / contentSize.height) * (height - vThumbHeight)
+    const vThumbTop = zoomedContentHeight > 0
+      ? (scrollTop / zoomedContentHeight) * (height - vThumbHeight)
       : 0;
 
     const hThumbWidth = Math.max(30, width * hRatio);
-    const hThumbLeft = contentSize.width > 0
-      ? (scrollLeft / contentSize.width) * (width - hThumbWidth)
+    const hThumbLeft = zoomedContentWidth > 0
+      ? (scrollLeft / zoomedContentWidth) * (width - hThumbWidth)
       : 0;
 
     setScrollbarState({ vThumbTop, vThumbHeight, hThumbLeft, hThumbWidth, showV, showH });

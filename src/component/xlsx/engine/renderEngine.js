@@ -86,6 +86,7 @@ export function renderRegion(ctx, params) {
     sheet, workbook,
     width, height,
     dpr = 1,
+    zoom = 1,
   } = params;
 
   if (!sheet || !workbook) return;
@@ -96,12 +97,13 @@ export function renderRegion(ctx, params) {
   const stylePool = workbook.stylePool;
 
   ctx.save();
-  ctx.scale(dpr, dpr);
-  ctx.clearRect(0, 0, width, height);
+  ctx.scale(dpr * zoom, dpr * zoom);
+  // Clear full logical unscaled width to prevent smearing
+  ctx.clearRect(0, 0, width / zoom, height / zoom);
 
   // ── Pass 1: White base + Grid lines ─────────────────────────
   ctx.fillStyle = '#ffffff';
-  ctx.fillRect(0, 0, width, height);
+  ctx.fillRect(0, 0, width / zoom, height / zoom);
 
   ctx.strokeStyle = GRID_COLOR;
   ctx.lineWidth = 0.5;
@@ -110,16 +112,16 @@ export function renderRegion(ctx, params) {
   for (let r = startRow; r <= endRow && r < rowPositions.length; r++) {
     if (sheet.hiddenRows.has(r)) continue;
     const y = Math.round(rowPositions[r] - offsetY) + 0.5;
-    if (y < -1 || y > height + 1) continue;
+    if (y < -1 || y > (height / zoom) + 1) continue;
     ctx.moveTo(0, y);
-    ctx.lineTo(width, y);
+    ctx.lineTo(width / zoom, y);
   }
   for (let c = startCol; c <= endCol && c < colPositions.length; c++) {
     if (sheet.hiddenCols.has(c)) continue;
     const x = Math.round(colPositions[c] - offsetX) + 0.5;
-    if (x < -1 || x > width + 1) continue;
+    if (x < -1 || x > (width / zoom) + 1) continue;
     ctx.moveTo(x, 0);
-    ctx.lineTo(x, height);
+    ctx.lineTo(x, height / zoom);
   }
   ctx.stroke();
 
@@ -137,7 +139,7 @@ export function renderRegion(ctx, params) {
       ? rowPositions[merge.endRow + 1] - offsetY
       : (rowPositions[merge.endRow] || 0) - offsetY + sheet.getRowHeight(merge.endRow);
 
-    if (mx2 < 0 || mx1 > width || my2 < 0 || my1 > height) continue;
+    if (mx2 < 0 || mx1 > (width / zoom) || my2 < 0 || my1 > (height / zoom)) continue;
 
     const key = `${merge.startRow},${merge.startCol}`;
     if (renderedMerges.has(key)) continue;
@@ -206,7 +208,7 @@ export function renderRegion(ctx, params) {
 
       // Font
       const baseFontSize = style.fontSize || defaultStyle.fontSize || 11;
-      const fontSize = baseFontSize * SCALE_FACTOR;
+      const fontSize = baseFontSize * SCALE_FACTOR; // Unscaled by zoom here, context handles it
       const fontWeight = style.fontWeight || defaultStyle.fontWeight;
       const fontStyle = style.fontStyle || defaultStyle.fontStyle;
       const fontFamily = style.fontFamily || defaultStyle.fontFamily;
@@ -358,22 +360,22 @@ function drawCellBorders(ctx, style, x, y, w, h) {
 
 // ─── Row / Column Headers ─────────────────────────────────────
 
-export function renderRowHeaders(ctx, { startRow, endRow, offsetY, width, height, sheet, dpr = 1 }) {
+export function renderRowHeaders(ctx, { startRow, endRow, offsetY, width, height, sheet, dpr = 1, zoom = 1 }) {
   const rowPositions = sheet.getRowPositions();
 
   ctx.save();
-  ctx.scale(dpr, dpr);
-  ctx.clearRect(0, 0, width, height);
+  ctx.scale(dpr, dpr * zoom); // Don't zoom the width of the row header, just the height
+  ctx.clearRect(0, 0, width, height / zoom);
 
   ctx.fillStyle = HEADER_BG;
-  ctx.fillRect(0, 0, width, height);
+  ctx.fillRect(0, 0, width, height / zoom);
 
   // Right border line
   ctx.strokeStyle = HEADER_BORDER;
   ctx.lineWidth = 1;
   ctx.beginPath();
   ctx.moveTo(width - 0.5, 0);
-  ctx.lineTo(width - 0.5, height);
+  ctx.lineTo(width - 0.5, height / zoom);
   ctx.stroke();
 
   ctx.fillStyle = HEADER_TEXT;
@@ -385,7 +387,7 @@ export function renderRowHeaders(ctx, { startRow, endRow, offsetY, width, height
     if (sheet.hiddenRows.has(r)) continue;
     const y = rowPositions[r] - offsetY;
     const h = sheet.getRowHeight(r);
-    if (y + h < 0 || y > height) continue;
+    if (y + h < 0 || y > height / zoom) continue;
 
     ctx.fillText(String(r + 1), width / 2, y + h / 2);
 
@@ -400,22 +402,22 @@ export function renderRowHeaders(ctx, { startRow, endRow, offsetY, width, height
   ctx.restore();
 }
 
-export function renderColHeaders(ctx, { startCol, endCol, offsetX, width, height, sheet, dpr = 1 }) {
+export function renderColHeaders(ctx, { startCol, endCol, offsetX, width, height, sheet, dpr = 1, zoom = 1 }) {
   const colPositions = sheet.getColPositions();
 
   ctx.save();
-  ctx.scale(dpr, dpr);
-  ctx.clearRect(0, 0, width, height);
+  ctx.scale(dpr * zoom, dpr); // Zoom only width, not height of the header
+  ctx.clearRect(0, 0, width / zoom, height);
 
   ctx.fillStyle = HEADER_BG;
-  ctx.fillRect(0, 0, width, height);
+  ctx.fillRect(0, 0, width / zoom, height);
 
   // Bottom border
   ctx.strokeStyle = HEADER_BORDER;
   ctx.lineWidth = 1;
   ctx.beginPath();
   ctx.moveTo(0, height - 0.5);
-  ctx.lineTo(width, height - 0.5);
+  ctx.lineTo(width / zoom, height - 0.5);
   ctx.stroke();
 
   ctx.fillStyle = HEADER_TEXT;
@@ -427,7 +429,7 @@ export function renderColHeaders(ctx, { startCol, endCol, offsetX, width, height
     if (sheet.hiddenCols.has(c)) continue;
     const x = colPositions[c] - offsetX;
     const w = sheet.getColWidth(c);
-    if (x + w < 0 || x > width) continue;
+    if (x + w < 0 || x > width / zoom) continue;
 
     ctx.fillText(colIndexToLetter(c), x + w / 2, height / 2);
 

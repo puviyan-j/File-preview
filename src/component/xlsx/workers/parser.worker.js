@@ -196,26 +196,21 @@ async function extractXlsxStyles(buffer) {
       const fillId = parseInt(xf.getAttribute('fillId') || '0');
       const borderId = parseInt(xf.getAttribute('borderId') || '0');
       const numFmtId = parseInt(xf.getAttribute('numFmtId') || '0');
-      const applyFont = xf.getAttribute('applyFont') !== '0';
-      const applyFill = xf.getAttribute('applyFill') !== '0';
-      const applyBorder = xf.getAttribute('applyBorder') !== '0';
-      const applyAlignment = xf.getAttribute('applyAlignment') !== '0';
-      const applyNumberFormat = xf.getAttribute('applyNumberFormat') !== '0';
+      
+      // Removed check for explicit 'applyFoo="1"' because Excel often omits it
+      if (fonts[fontId]) Object.assign(style, fonts[fontId]);
+      if (fills[fillId] && Object.keys(fills[fillId]).length > 0) Object.assign(style, fills[fillId]);
+      if (borders[borderId] && Object.keys(borders[borderId]).length > 0) Object.assign(style, borders[borderId]);
+      if (numFmtId && numFmtMap[numFmtId]) style.numberFormat = numFmtMap[numFmtId];
 
-      if (applyFont && fonts[fontId]) Object.assign(style, fonts[fontId]);
-      if (applyFill && fills[fillId] && Object.keys(fills[fillId]).length > 0) Object.assign(style, fills[fillId]);
-      if (applyBorder && borders[borderId] && Object.keys(borders[borderId]).length > 0) Object.assign(style, borders[borderId]);
-      if (applyNumberFormat && numFmtId && numFmtMap[numFmtId]) style.numberFormat = numFmtMap[numFmtId];
-
-      if (applyAlignment) {
-        const align = getFirstNode(xf, 'alignment');
-        if (align) {
-          const h = align.getAttribute('horizontal');
-          if (h && h !== 'general') style.textAlign = h;
-          const v = align.getAttribute('vertical');
-          if (v) style.verticalAlign = v;
-          if (align.getAttribute('wrapText') === '1') style.wrap = true;
-        }
+      // Read alignment separately
+      const align = getFirstNode(xf, 'alignment');
+      if (align) {
+        const h = align.getAttribute('horizontal');
+        if (h && h !== 'general') style.textAlign = h;
+        const v = align.getAttribute('vertical');
+        if (v) style.verticalAlign = v;
+        if (align.getAttribute('wrapText') === '1') style.wrap = true;
       }
 
       return Object.keys(style).length > 0 ? style : null;
@@ -334,7 +329,7 @@ async function parseWorkbook(buffer, fileName, format) {
     const meta = extractSheetMetadata(ws, sheetName, range);
     self.postMessage({ type: 'SHEET_META', sheet: sheetName, meta, totalRows, totalCols: range.e.c - range.s.c + 1 });
 
-    const CHUNK_SIZE = 2000;
+    const CHUNK_SIZE = 100;
     const startR = range.s.r;
     const endR = range.e.r;
     const startC = range.s.c; // absolute start column
@@ -393,6 +388,9 @@ async function parseWorkbook(buffer, fileName, format) {
         parsedRows: chunkEnd - startR + 1,
         totalRows,
       });
+
+      // Yield execution to the event loop so the main thread can process and render the chunk
+      await new Promise(resolve => setTimeout(resolve, 0));
     }
   }
 
