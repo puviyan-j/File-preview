@@ -1,7 +1,10 @@
 /* ─── SheetViewer.css ─────────────────────────────────────── */
 
-/* Import modern font */
+/* Import UI font and common Excel fonts */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Carlito:ital,wght@0,400;0,700;1,400;1,700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Arimo:ital,wght@0,400;0,700;1,400;1,700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Tinos:ital,wght@0,400;0,700;1,400;1,700&display=swap');
 
 /* ─── Root Container ───────────────────────────────────────── */
 .sv-root {

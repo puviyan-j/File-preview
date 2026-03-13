@@ -14,6 +14,30 @@ const HEADER_BORDER = '#d0d7de';
 const HEADER_TEXT = '#57606a';
 const DEFAULT_TEXT_COLOR = '#1f2328';
 
+// ─── Font Name Mapping ────────────────────────────────────────
+// Maps Excel font names that aren't available in browsers to web-safe equivalents.
+// Carlito is a metrically-compatible free substitute for Calibri (loaded in CSS).
+const FONT_MAP = {
+  'calibri':              'Carlito, Arial, sans-serif',
+  'cambria':              'Georgia, "Times New Roman", serif',
+  'cambria math':         'Georgia, serif',
+  'consolas':             '"Courier New", Courier, monospace',
+  'courier new':          '"Courier New", Courier, monospace',
+  'franklin gothic medium': 'Arial, sans-serif',
+  'gill sans mt':         'Arial, sans-serif',
+  'lucida console':       'monospace',
+  'palatino linotype':    'Palatino, Georgia, serif',
+  'times new roman':      '"Times New Roman", Times, serif',
+  'trebuchet ms':         '"Trebuchet MS", Arial, sans-serif',
+};
+
+/** Resolve an Excel fontFamily name to a CSS font-family stack */
+function resolveFontFamily(name) {
+  if (!name) return 'Arial, sans-serif';
+  const mapped = FONT_MAP[name.toLowerCase()];
+  return mapped || `"${name}", Arial, sans-serif`;
+}
+
 // Border style weight map (Excel border style → pixel width)
 const BORDER_WIDTHS = {
   thin: 1,
@@ -212,7 +236,7 @@ export function renderRegion(ctx, params) {
       const fontWeight = style.fontWeight || defaultStyle.fontWeight;
       const fontStyle = style.fontStyle || defaultStyle.fontStyle;
       const fontFamily = style.fontFamily || defaultStyle.fontFamily;
-      ctx.font = `${fontStyle} ${fontWeight} ${fontSize}px "${fontFamily}", Arial, sans-serif`;
+      ctx.font = `${fontStyle} ${fontWeight} ${fontSize}px ${resolveFontFamily(fontFamily)}`;
       ctx.fillStyle = style.color || defaultStyle.color || DEFAULT_TEXT_COLOR;
 
       // Cell rect
@@ -364,38 +388,40 @@ export function renderRowHeaders(ctx, { startRow, endRow, offsetY, width, height
   const rowPositions = sheet.getRowPositions();
 
   ctx.save();
-  ctx.scale(dpr, dpr * zoom); // Don't zoom the width of the row header, just the height
-  ctx.clearRect(0, 0, width, height / zoom);
+  ctx.scale(dpr, dpr); // Uniform scaling to prevent stretched text
+  ctx.clearRect(0, 0, width, height);
 
   ctx.fillStyle = HEADER_BG;
-  ctx.fillRect(0, 0, width, height / zoom);
+  ctx.fillRect(0, 0, width, height);
 
   // Right border line
   ctx.strokeStyle = HEADER_BORDER;
   ctx.lineWidth = 1;
   ctx.beginPath();
   ctx.moveTo(width - 0.5, 0);
-  ctx.lineTo(width - 0.5, height / zoom);
+  ctx.lineTo(width - 0.5, height);
   ctx.stroke();
 
   ctx.fillStyle = HEADER_TEXT;
-  ctx.font = '11px "Inter", "Segoe UI", Arial, sans-serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
 
-  for (let r = startRow; r < endRow && r < rowPositions.length; r++) {
+  // Scale font size by zoom, but keep it readable (min 8px)
+  const fontSize = Math.max(8, 12 * zoom);
+  ctx.font = `${fontSize}px sans-serif`;
+
+  for (let r = startRow; r <= endRow && r < rowPositions.length; r++) {
     if (sheet.hiddenRows.has(r)) continue;
-    const y = rowPositions[r] - offsetY;
-    const h = sheet.getRowHeight(r);
-    if (y + h < 0 || y > height / zoom) continue;
+    const y = (rowPositions[r] - offsetY) * zoom;
+    const h = sheet.getRowHeight(r) * zoom;
+    if (y + h < 0 || y > height) continue;
 
     ctx.fillText(String(r + 1), width / 2, y + h / 2);
 
-    ctx.beginPath();
-    ctx.moveTo(0, Math.round(y + h) + 0.5);
-    ctx.lineTo(width, Math.round(y + h) + 0.5);
     ctx.strokeStyle = HEADER_BORDER;
-    ctx.lineWidth = 0.5;
+    ctx.beginPath();
+    ctx.moveTo(0, y + h - 0.5);
+    ctx.lineTo(width, y + h - 0.5);
     ctx.stroke();
   }
 
@@ -406,38 +432,40 @@ export function renderColHeaders(ctx, { startCol, endCol, offsetX, width, height
   const colPositions = sheet.getColPositions();
 
   ctx.save();
-  ctx.scale(dpr * zoom, dpr); // Zoom only width, not height of the header
-  ctx.clearRect(0, 0, width / zoom, height);
+  ctx.scale(dpr, dpr); // Uniform scaling
+  ctx.clearRect(0, 0, width, height);
 
   ctx.fillStyle = HEADER_BG;
-  ctx.fillRect(0, 0, width / zoom, height);
+  ctx.fillRect(0, 0, width, height);
 
   // Bottom border
   ctx.strokeStyle = HEADER_BORDER;
   ctx.lineWidth = 1;
   ctx.beginPath();
   ctx.moveTo(0, height - 0.5);
-  ctx.lineTo(width / zoom, height - 0.5);
+  ctx.lineTo(width, height - 0.5);
   ctx.stroke();
 
   ctx.fillStyle = HEADER_TEXT;
-  ctx.font = '11px "Inter", "Segoe UI", Arial, sans-serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
 
-  for (let c = startCol; c < endCol && c < colPositions.length; c++) {
+  // Scale font size by zoom, but keep it readable (min 8px)
+  const fontSize = Math.max(8, 12 * zoom);
+  ctx.font = `${fontSize}px sans-serif`;
+
+  for (let c = startCol; c <= endCol && c < colPositions.length; c++) {
     if (sheet.hiddenCols.has(c)) continue;
-    const x = colPositions[c] - offsetX;
-    const w = sheet.getColWidth(c);
-    if (x + w < 0 || x > width / zoom) continue;
+    const x = (colPositions[c] - offsetX) * zoom;
+    const w = sheet.getColWidth(c) * zoom;
+    if (x + w < 0 || x > width) continue;
 
     ctx.fillText(colIndexToLetter(c), x + w / 2, height / 2);
 
-    ctx.beginPath();
-    ctx.moveTo(Math.round(x + w) + 0.5, 0);
-    ctx.lineTo(Math.round(x + w) + 0.5, height);
     ctx.strokeStyle = HEADER_BORDER;
-    ctx.lineWidth = 0.5;
+    ctx.beginPath();
+    ctx.moveTo(x + w - 0.5, 0);
+    ctx.lineTo(x + w - 0.5, height);
     ctx.stroke();
   }
 

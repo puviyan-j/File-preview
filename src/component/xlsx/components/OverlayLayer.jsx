@@ -1,7 +1,13 @@
 import React from 'react';
 
+// These must match the constants in CanvasGrid.jsx
+const ROW_HEADER_WIDTH = 50;
+const COL_HEADER_HEIGHT = 26;
+
 /**
  * OverlayLayer — Positions images and charts over the canvas grid using DOM elements.
+ * The overlay div is positioned relative to sv-grid-area, so we must account for
+ * the row-header (left) and col-header (top) offsets.
  */
 export default function OverlayLayer({ images, charts, scrollTop, scrollLeft, sheet }) {
   if ((!images || images.length === 0) && (!charts || charts.length === 0)) {
@@ -12,12 +18,24 @@ export default function OverlayLayer({ images, charts, scrollTop, scrollLeft, sh
   const colPositions = sheet?.getColPositions();
 
   return (
-    <div className="sv-overlay">
+    <div
+      className="sv-overlay"
+      style={{
+        left: `${ROW_HEADER_WIDTH}px`,
+        top: `${COL_HEADER_HEIGHT}px`,
+        right: 0,
+        bottom: 0,
+        overflow: 'hidden',
+      }}
+    >
       {/* Images */}
       {images && images.map((img, idx) => {
         if (!rowPositions || !colPositions) return null;
         const top = (rowPositions[img.row] || 0) - scrollTop;
         const left = (colPositions[img.col] || 0) - scrollLeft;
+
+        // Don't render images completely outside the viewport
+        if (top + (img.height || 100) < 0 || left + (img.width || 100) < 0) return null;
 
         return (
           <img

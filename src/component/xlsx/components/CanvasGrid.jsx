@@ -24,6 +24,9 @@ export default function CanvasGrid({ sheet, workbook, zoom = 1, onScrollChange }
   const scrollRef = useRef({ top: 0, left: 0 });
   const sheetRef = useRef(null);
   const workbookRef = useRef(null);
+  const zoomRef = useRef(zoom);
+
+  zoomRef.current = zoom;
 
   // Resizing state
   const resizeRef = useRef({
@@ -47,6 +50,20 @@ export default function CanvasGrid({ sheet, workbook, zoom = 1, onScrollChange }
     hThumbLeft: 0, hThumbWidth: 30,
     showV: false, showH: false,
   });
+
+  // Scrollbar drag state
+  const scrollDragRef = useRef({
+    active: false,
+    axis: null, // 'v' | 'h'
+    startPointer: 0,
+    startScroll: 0,
+    trackSize: 0,
+    thumbSize: 0,
+    contentSize: 0,
+  });
+
+  // Store latest scrollbar metrics so drag handlers can read them
+  const scrollbarMetricsRef = useRef({ vThumbHeight: 30, hThumbWidth: 30 });
 
   // Initialize engines
   useEffect(() => {
@@ -127,7 +144,8 @@ export default function CanvasGrid({ sheet, workbook, zoom = 1, onScrollChange }
     if (!s || !scrollEngineRef.current) return;
     const { width, height } = getContentSize(s);
     const vp = sizeRef.current;
-    scrollEngineRef.current.setContentSize(width * zoom, height * zoom, vp.width, vp.height);
+    const currentZoom = zoomRef.current;
+    scrollEngineRef.current.setContentSize(width * currentZoom, height * currentZoom, vp.width, vp.height);
   }
 
   function resizeCanvases(w, h) {
@@ -333,6 +351,91 @@ export default function CanvasGrid({ sheet, workbook, zoom = 1, onScrollChange }
     };
   }, []);
 
+  // ─── Scrollbar Drag ──────────────────────────────────────
+  const handleVThumbMouseDown = useCallback((e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const se = scrollEngineRef.current;
+    if (!se) return;
+    const { height } = sizeRef.current;
+    const { vThumbHeight } = scrollbarMetricsRef.current;
+    const s = sheetRef.current;
+    if (!s) return;
+    const { height: contentHeight } = getContentSize(s);
+    const currentZoom = zoomRef.current;
+    scrollDragRef.current = {
+      active: true,
+      axis: 'v',
+      startPointer: e.clientY,
+      startScroll: se.scrollTop,
+      trackSize: height - vThumbHeight,
+      thumbSize: vThumbHeight,
+      contentSize: contentHeight * currentZoom,
+    };
+    document.body.style.cursor = 'ns-resize';
+    document.addEventListener('mousemove', handleScrollDragMove);
+    document.addEventListener('mouseup', handleScrollDragUp);
+  }, []);
+
+  const handleHThumbMouseDown = useCallback((e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const se = scrollEngineRef.current;
+    if (!se) return;
+    const { width } = sizeRef.current;
+    const { hThumbWidth } = scrollbarMetricsRef.current;
+    const s = sheetRef.current;
+    if (!s) return;
+    const { width: contentWidth } = getContentSize(s);
+    const currentZoom = zoomRef.current;
+    scrollDragRef.current = {
+      active: true,
+      axis: 'h',
+      startPointer: e.clientX,
+      startScroll: se.scrollLeft,
+      trackSize: width - hThumbWidth,
+      thumbSize: hThumbWidth,
+      contentSize: contentWidth * currentZoom,
+    };
+    document.body.style.cursor = 'ew-resize';
+    document.addEventListener('mousemove', handleScrollDragMove);
+    document.addEventListener('mouseup', handleScrollDragUp);
+  }, []);
+
+  const handleScrollDragMove = useCallback((e) => {
+    const sd = scrollDragRef.current;
+    if (!sd.active) return;
+    const se = scrollEngineRef.current;
+    if (!se) return;
+    if (sd.trackSize <= 0) return;
+
+    if (sd.axis === 'v') {
+      const delta = e.clientY - sd.startPointer;
+      const scrollRatio = delta / sd.trackSize;
+      const newScroll = sd.startScroll + scrollRatio * sd.contentSize;
+      se.scrollTo(newScroll, se.scrollLeft);
+    } else {
+      const delta = e.clientX - sd.startPointer;
+      const scrollRatio = delta / sd.trackSize;
+      const newScroll = sd.startScroll + scrollRatio * sd.contentSize;
+      se.scrollTo(se.scrollTop, newScroll);
+    }
+  }, []);
+
+  const handleScrollDragUp = useCallback(() => {
+    scrollDragRef.current.active = false;
+    document.body.style.cursor = 'default';
+    document.removeEventListener('mousemove', handleScrollDragMove);
+    document.removeEventListener('mouseup', handleScrollDragUp);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      document.removeEventListener('mousemove', handleScrollDragMove);
+      document.removeEventListener('mouseup', handleScrollDragUp);
+    };
+  }, []);
+
   function scheduleRender() {
     if (rafRef.current) return;
     rafRef.current = requestAnimationFrame(() => {
@@ -351,13 +454,14 @@ export default function CanvasGrid({ sheet, workbook, zoom = 1, onScrollChange }
 
     const { top: scrollTop, left: scrollLeft } = scrollRef.current;
     const dpr = window.devicePixelRatio || 1;
+    const currentZoom = zoomRef.current;
 
     // Compute visible range internally converting pixel offsets back to native coords
     const range = getVisibleRange({
-      scrollTop: scrollTop / zoom,
-      scrollLeft: scrollLeft / zoom,
-      viewportWidth: width / zoom,
-      viewportHeight: height / zoom,
+      scrollTop: scrollTop / currentZoom,
+      scrollLeft: scrollLeft / currentZoom,
+      viewportWidth: width / currentZoom,
+      viewportHeight: height / currentZoom,
       sheet: currentSheet,
       overscan: 3,
     });
@@ -370,14 +474,14 @@ export default function CanvasGrid({ sheet, workbook, zoom = 1, onScrollChange }
         endRow: range.endRow,
         startCol: range.startCol,
         endCol: range.endCol,
-        offsetX: scrollLeft / zoom,
-        offsetY: scrollTop / zoom,
+        offsetX: scrollLeft / currentZoom,
+        offsetY: scrollTop / currentZoom,
         sheet: currentSheet,
         workbook: currentWorkbook,
         width,
         height,
         dpr,
-        zoom,
+        zoom: currentZoom,
       });
     }
 
@@ -387,12 +491,12 @@ export default function CanvasGrid({ sheet, workbook, zoom = 1, onScrollChange }
       renderRowHeaders(rowCtx, {
         startRow: range.startRow,
         endRow: range.endRow,
-        offsetY: scrollTop / zoom,
+        offsetY: scrollTop / currentZoom,
         width: ROW_HEADER_WIDTH,
         height,
         sheet: currentSheet,
         dpr,
-        zoom,
+        zoom: currentZoom,
       });
     }
 
@@ -402,26 +506,26 @@ export default function CanvasGrid({ sheet, workbook, zoom = 1, onScrollChange }
       renderColHeaders(colCtx, {
         startCol: range.startCol,
         endCol: range.endCol,
-        offsetX: scrollLeft / zoom,
+        offsetX: scrollLeft / currentZoom,
         width,
         height: COL_HEADER_HEIGHT,
         sheet: currentSheet,
         dpr,
-        zoom,
+        zoom: currentZoom,
       });
     }
 
     // Update scrollbar thumbs
-    updateScrollbars(scrollTop, scrollLeft, currentSheet);
+    updateScrollbars(scrollTop, scrollLeft, currentSheet, currentZoom);
   }
 
-  function updateScrollbars(scrollTop, scrollLeft, currentSheet) {
+  function updateScrollbars(scrollTop, scrollLeft, currentSheet, currentZoom) {
     if (!currentSheet) return;
     const { width, height } = sizeRef.current;
     const contentSize = getContentSize(currentSheet);
 
-    const zoomedContentHeight = contentSize.height * zoom;
-    const zoomedContentWidth = contentSize.width * zoom;
+    const zoomedContentHeight = contentSize.height * currentZoom;
+    const zoomedContentWidth = contentSize.width * currentZoom;
 
     if (zoomedContentHeight === 0 || zoomedContentWidth === 0) return;
 
@@ -431,15 +535,18 @@ export default function CanvasGrid({ sheet, workbook, zoom = 1, onScrollChange }
     const showV = vRatio < 1;
     const showH = hRatio < 1;
 
-    const vThumbHeight = Math.max(30, height * vRatio);
+    const vThumbHeight = Math.max(30, Math.min(height - 4, height * vRatio));
     const vThumbTop = zoomedContentHeight > 0
       ? (scrollTop / zoomedContentHeight) * (height - vThumbHeight)
       : 0;
 
-    const hThumbWidth = Math.max(30, width * hRatio);
+    const hThumbWidth = Math.max(30, Math.min(width - 4, width * hRatio));
     const hThumbLeft = zoomedContentWidth > 0
       ? (scrollLeft / zoomedContentWidth) * (width - hThumbWidth)
       : 0;
+
+    // Keep metrics in sync for drag calculations
+    scrollbarMetricsRef.current = { vThumbHeight, hThumbWidth };
 
     setScrollbarState({ vThumbTop, vThumbHeight, hThumbLeft, hThumbWidth, showV, showH });
   }
@@ -507,6 +614,7 @@ export default function CanvasGrid({ sheet, workbook, zoom = 1, onScrollChange }
               top: `${scrollbarState.vThumbTop}px`,
               height: `${scrollbarState.vThumbHeight}px`,
             }}
+            onMouseDown={handleVThumbMouseDown}
           />
         </div>
       )}
@@ -520,6 +628,7 @@ export default function CanvasGrid({ sheet, workbook, zoom = 1, onScrollChange }
               left: `${scrollbarState.hThumbLeft}px`,
               width: `${scrollbarState.hThumbWidth}px`,
             }}
+            onMouseDown={handleHThumbMouseDown}
           />
         </div>
       )}

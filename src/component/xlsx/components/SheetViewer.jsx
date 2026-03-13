@@ -90,6 +90,7 @@ export default function SheetViewer() {
     setParsing(true);
     setProgress(0);
     setActiveSheetIndex(0);
+    setZoom(1.0);
 
     // Create fresh workbook model
     const wb = createWorkbookModel();
@@ -268,11 +269,11 @@ export default function SheetViewer() {
 
   const sheetInfo = workbook
     ? {
-        rows: activeSheet?.rowCount || 0,
-        cols: activeSheet?.colCount || 0,
-        sheets: workbook.sheetCount,
-        strings: workbook.stringPool.size,
-      }
+      rows: activeSheet?.rowCount || 0,
+      cols: activeSheet?.colCount || 0,
+      sheets: workbook.sheetCount,
+      strings: workbook.stringPool.size,
+    }
     : null;
 
   // ─── Render ─────────────────────────────────────────────────
@@ -330,7 +331,7 @@ export default function SheetViewer() {
             </>
           )}
           {parsing && <span>⏳ Parsing...</span>}
-          
+
           <div className="sv-zoom-controls">
             <button onClick={() => setZoom(z => Math.max(0.25, z - 0.25))} title="Zoom Out">−</button>
             <span style={{ width: '40px', textAlign: 'center' }}>{Math.round(zoom * 100)}%</span>
@@ -345,6 +346,7 @@ export default function SheetViewer() {
               setFileName('');
               setParsing(false);
               setProgress(0);
+              setZoom(1.0);
               workerRef.current?.terminate();
             }}
             title="Open another file"

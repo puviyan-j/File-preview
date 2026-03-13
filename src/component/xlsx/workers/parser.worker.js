@@ -122,10 +122,27 @@ async function extractXlsxStyles(buffer) {
       if (sz) f.fontSize = parseFloat(sz.getAttribute('val')) || 11;
       const nm = getFirstNode(el, 'name');
       if (nm) f.fontFamily = nm.getAttribute('val');
-      if (getFirstNode(el, 'b')) f.fontWeight = 'bold';
-      if (getFirstNode(el, 'i')) f.fontStyle = 'italic';
-      const uNode = getFirstNode(el, 'u');
-      if (uNode && uNode.getAttribute('val') !== 'none') f.textDecoration = 'underline';
+
+      // Use direct child scan for boolean font flags to avoid false positives
+      // from xmldom's getElementsByTagNameNS traversing nested elements.
+      const childNames = new Set();
+      const childVals = {};
+      const children = Array.from(el.childNodes).filter(n => n.nodeType === 1);
+      for (const child of children) {
+        const tag = (child.localName || child.tagName || '').toLowerCase();
+        childNames.add(tag);
+        const v = child.getAttribute('val');
+        if (v !== null) childVals[tag] = v;
+      }
+
+      // Bold: <b/> present AND val != "0"
+      if (childNames.has('b') && childVals['b'] !== '0') f.fontWeight = 'bold';
+      // Italic: <i/> present AND val != "0"
+      if (childNames.has('i') && childVals['i'] !== '0') f.fontStyle = 'italic';
+
+      // Underline
+      if (childNames.has('u') && childVals['u'] !== 'none') f.textDecoration = 'underline';
+
       const cNode = getFirstNode(el, 'color');
       if (cNode) {
         const c = resolveColor(cNode);
@@ -196,7 +213,7 @@ async function extractXlsxStyles(buffer) {
       const fillId = parseInt(xf.getAttribute('fillId') || '0');
       const borderId = parseInt(xf.getAttribute('borderId') || '0');
       const numFmtId = parseInt(xf.getAttribute('numFmtId') || '0');
-      
+
       // Removed check for explicit 'applyFoo="1"' because Excel often omits it
       if (fonts[fontId]) Object.assign(style, fonts[fontId]);
       if (fills[fillId] && Object.keys(fills[fillId]).length > 0) Object.assign(style, fills[fillId]);
@@ -273,12 +290,133 @@ async function extractXlsxStyles(buffer) {
       return map;
     }));
 
+    // --- 8. Extract embedded images per sheet ---
+    const sheetImageArrays = await extractXlsxImages(zip, sheetPaths, parser);
+
     console.log(`[Parser] Extracted ${cellXfStyles.length} styles, ${borders.length} borders, ${sheetStyleMaps.length} sheet maps.`);
-    return { cellXfStyles, sheetStyleMaps };
+    return { cellXfStyles, sheetStyleMaps, sheetImageArrays };
   } catch (err) {
     console.error('[Parser] Style extraction failed:', err);
     return null;
   }
+}
+
+// ─── XLSX Image Extraction ────────────────────────────────────
+/**
+ * Extract embedded images from xl/drawings/drawingN.xml.
+ * Returns an array of per-sheet image arrays:
+ *   [ [{row, col, width, height, src}], ... ]
+ * where src is a data:image/* URL.
+ */
+async function extractXlsxImages(zip, sheetPaths, parser) {
+  const getNodes = (p, t) => Array.from(p.getElementsByTagNameNS('*', t));
+  const getFirstNode = (p, t) => p.getElementsByTagNameNS('*', t)[0] || null;
+  const EMU_PER_PX = 9525; // 914400 EMU/inch ÷ 96 dpi
+
+  // Build sheet → drawing path map via sheet .rels
+  const sheetImages = await Promise.all(sheetPaths.map(async (sheetPath, _si) => {
+    const images = [];
+    try {
+      // Get sheet rels
+      const parts = sheetPath.split('/');
+      const relsPath = parts.slice(0, -1).join('/') + '/_rels/' + parts[parts.length - 1] + '.rels';
+      const relsXml = await zip.file(relsPath)?.async('string');
+      if (!relsXml) return images;
+
+      const relsDoc = parser.parseFromString(relsXml, 'text/xml');
+      const relationships = getNodes(relsDoc, 'Relationship');
+
+      for (const rel of relationships) {
+        const type = rel.getAttribute('Type') || '';
+        if (!type.includes('drawing')) continue;
+
+        let drawingTarget = rel.getAttribute('Target') || '';
+        // Resolve path relative to sheet directory
+        if (drawingTarget.startsWith('../')) {
+          drawingTarget = 'xl/' + drawingTarget.replace('../', '');
+        } else if (!drawingTarget.startsWith('xl/')) {
+          const dir = parts.slice(0, -1).join('/');
+          drawingTarget = dir + '/' + drawingTarget;
+        }
+
+        const drawingXml = await zip.file(drawingTarget)?.async('string');
+        if (!drawingXml) continue;
+
+        const drawingDoc = parser.parseFromString(drawingXml, 'text/xml');
+
+        // Build drawing rels to resolve image paths
+        const drawingParts = drawingTarget.split('/');
+        const drawingRelsPath = drawingParts.slice(0, -1).join('/') + '/_rels/' + drawingParts[drawingParts.length - 1] + '.rels';
+        const drawingRelsXml = await zip.file(drawingRelsPath)?.async('string');
+        const drawingRels = drawingRelsXml ? parser.parseFromString(drawingRelsXml, 'text/xml') : null;
+        const drawingRelMap = new Map();
+        if (drawingRels) {
+          for (const r of getNodes(drawingRels, 'Relationship')) {
+            drawingRelMap.set(r.getAttribute('Id'), r.getAttribute('Target'));
+          }
+        }
+
+        // Parse oneCellAnchor and twoCellAnchor elements
+        for (const anchorTag of ['oneCellAnchor', 'twoCellAnchor']) {
+          const anchors = getNodes(drawingDoc, anchorTag);
+          for (const anchor of anchors) {
+            try {
+              // From cell (top-left)
+              const fromEl = getFirstNode(anchor, 'from');
+              if (!fromEl) continue;
+              const rowEl = getFirstNode(fromEl, 'row');
+              const colEl = getFirstNode(fromEl, 'col');
+              const row = parseInt(rowEl?.textContent || '0');
+              const col = parseInt(colEl?.textContent || '0');
+
+              // Size in EMU
+              let widthPx = null, heightPx = null;
+              const extEl = getFirstNode(anchor, 'ext');
+              if (extEl) {
+                const cx = parseInt(extEl.getAttribute('cx') || '0');
+                const cy = parseInt(extEl.getAttribute('cy') || '0');
+                widthPx = Math.round(cx / EMU_PER_PX);
+                heightPx = Math.round(cy / EMU_PER_PX);
+              }
+
+              // Find the blipFill → blip → r:embed
+              const blip = getFirstNode(anchor, 'blip');
+              if (!blip) continue;
+              const rEmbed = blip.getAttribute('r:embed') || blip.getAttribute('embed');
+              if (!rEmbed) continue;
+
+              let mediaTarget = drawingRelMap.get(rEmbed);
+              if (!mediaTarget) continue;
+              // Resolve relative to drawing dir
+              if (mediaTarget.startsWith('../')) {
+                mediaTarget = 'xl/' + mediaTarget.replace('../', '');
+              } else if (!mediaTarget.startsWith('xl/')) {
+                const drawingDir = drawingParts.slice(0, -1).join('/');
+                mediaTarget = drawingDir + '/' + mediaTarget;
+              }
+
+              const mediaData = await zip.file(mediaTarget)?.async('base64');
+              if (!mediaData) continue;
+
+              const ext = (mediaTarget.split('.').pop() || 'png').toLowerCase();
+              const mimeMap = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', bmp: 'image/bmp', tiff: 'image/tiff', wmf: 'image/wmf', emf: 'image/emf' };
+              const mime = mimeMap[ext] || 'image/png';
+              const src = `data:${mime};base64,${mediaData}`;
+
+              images.push({ row, col, width: widthPx, height: heightPx, src });
+            } catch (anchorErr) {
+              console.warn('[Parser] Skipping anchor:', anchorErr.message);
+            }
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('[Parser] Image extraction failed for sheet:', err.message);
+    }
+    return images;
+  }));
+
+  return sheetImages;
 }
 
 function colLetterToIndex(letters) {
@@ -327,6 +465,13 @@ async function parseWorkbook(buffer, fileName, format) {
     const totalRows = range.e.r - range.s.r + 1;
 
     const meta = extractSheetMetadata(ws, sheetName, range);
+
+    // Inject images extracted from drawings XML
+    const sheetImgs = styleData?.sheetImageArrays?.[si];
+    if (sheetImgs && sheetImgs.length > 0) {
+      meta.images = sheetImgs;
+    }
+
     self.postMessage({ type: 'SHEET_META', sheet: sheetName, meta, totalRows, totalCols: range.e.c - range.s.c + 1 });
 
     const CHUNK_SIZE = 100;
